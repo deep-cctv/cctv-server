@@ -1,4 +1,6 @@
 import base64
+from os import mkdir
+import time
 from typing import Annotated
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketException, status
 from pydantic import BaseModel
@@ -41,9 +43,22 @@ async def stream(websocket: WebSocket, token: Annotated[str | None, Query()] = N
             code=status.HTTP_401_UNAUTHORIZED, reason="유효하지 않은 토큰"
         )
     await websocket.accept()
+
+    dir_name = "storage/" + token.split(",")[0]
+
     while True:
         data = await websocket.receive_text()
         video_bytes = base64.b64decode(data)
-        with open("received_chunk.mp4", "wb") as f:
+
+        try:
+            mkdir("storage")
+        except:
+            pass
+        try:
+            mkdir(dir_name)
+        except:
+            pass
+
+        with open(dir_name + "/" + str(time.time()) + ".mp4", "wb") as f:
             f.write(video_bytes)
         print("Received a video chunk")
