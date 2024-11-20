@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Response
+import base64
+from fastapi import FastAPI, HTTPException, WebSocket
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,9 +23,19 @@ class Auth(BaseModel):
     token:str
 
 @app.post("/authorize")
-async def authorize(auth:Auth,response:Response):
+async def authorize(auth:Auth):
     if auth.token in user_tokens:
-        response.set_cookie(key="token",value=auth.token)
         return auth.token
     else:
         raise HTTPException(status_code=401,detail="유효하지 않은 토큰입니다.")
+    
+@app.websocket('/stream')
+async def stream(websocket: WebSocket):
+    await websocket.accept()
+    while True:
+        data = await websocket.receive_text()
+        video_bytes = base64.b64decode(data)
+        with open('received_chunk.mp4', 'ab') as f:
+            f.write(video_bytes)
+            f.close()
+        print("Received a video chunk")
