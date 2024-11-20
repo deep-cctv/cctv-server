@@ -36,11 +36,11 @@ async def authorize(auth: Auth):
 
 
 @app.websocket("/stream")
-async def stream(websocket: WebSocket, token: Annotated[str | None, Query()] = None):
+async def stream(websocket: WebSocket, token: Annotated[str | None, Query()]):
     # message 에 토큰 포함하도록, 그 토큰 디렉토리에 파일 검사하도록.
     if token not in user_tokens:
         raise WebSocketException(
-            code=status.HTTP_401_UNAUTHORIZED, reason="유효하지 않은 토큰"
+            code=status.WS_1008_POLICY_VIOLATION, reason="유효하지 않은 토큰"
         )
     await websocket.accept()
 
@@ -60,4 +60,5 @@ async def stream(websocket: WebSocket, token: Annotated[str | None, Query()] = N
 
         with open(dir_name + "/" + str(time.time()) + ".mp4", "wb") as f:
             f.write(video_bytes)
+
         print("Received a video chunk")
