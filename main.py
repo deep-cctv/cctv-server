@@ -45,19 +45,18 @@ async def stream(websocket: WebSocket, token: Annotated[str | None, Query()] = N
     await websocket.accept()
 
     dir_name = "storage/" + token.split(",")[0]
+    try:
+        mkdir("storage")
+    except:
+        pass
+    try:
+        mkdir(dir_name)
+    except:
+        pass
 
     while True:
         data = await websocket.receive_text()
         video_bytes = base64.b64decode(data)
-
-        try:
-            mkdir("storage")
-        except:
-            pass
-        try:
-            mkdir(dir_name)
-        except:
-            pass
 
         with open(dir_name + "/" + str(time.time()) + ".mp4", "wb") as f:
             f.write(video_bytes)
