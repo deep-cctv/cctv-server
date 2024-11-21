@@ -20,9 +20,12 @@ user_tokens = {
     "lee-donghyun,adsfasdfasdfasdf"
 }
 
+monitors: dict[str, list[WebSocket]] = {}
+
 
 class Auth(BaseModel):
     token: str
+    client_name: str
 
 
 @app.post("/authorize")
@@ -36,17 +39,22 @@ async def authorize(auth: Auth):
 
 
 @app.websocket("/stream")
-async def stream(websocket: WebSocket, token: Annotated[str | None, Query()]):
-    # message 에 토큰 포함하도록, 그 토큰 디렉토리에 파일 검사하도록.
-    if token not in user_tokens:
+async def stream(websocket: WebSocket, auth: Annotated[Auth, Query()]):
+    if auth.token not in user_tokens:
         raise WebSocketException(
             code=status.WS_1008_POLICY_VIOLATION, reason="유효하지 않은 토큰"
         )
+
     await websocket.accept()
 
-    dir_name = "storage/" + token.split(",")[0]
+    identifier = auth.token.split(",")[0]
+    dir_name = "storage/" + identifier + "/" + auth.client_name
     try:
         mkdir("storage")
+    except:
+        pass
+    try:
+        mkdir("storage/" + identifier)
     except:
         pass
     try:
@@ -58,7 +66,36 @@ async def stream(websocket: WebSocket, token: Annotated[str | None, Query()]):
         data = await websocket.receive_text()
         video_bytes = base64.b64decode(data)
 
-        with open(dir_name + "/" + str(time.time()) + ".mp4", "wb") as f:
+        file_name = dir_name + "/" + str(time.time()) + ".mp4"
+        with open(file_name, "wb") as f:
             f.write(video_bytes)
 
-        print("Received a video chunk")
+        if identifier in monitors:
+            for subscriber in monitors[identifier]:
+                await subscriber.send_text(file_name)
+
+        print("Received a video chunk", identifier, file_name)
+
+
+@app.websocket("/monitor")
+async def monitor(websocket: WebSocket, token: Annotated[str | None, Query()]):
+    if token not in user_tokens:
+        raise WebSocketException(
+            code=status.WS_1008_POLICY_VIOLATION, reason="유효하지 않은 토큰"
+        )
+    await websocket.accept()
+
+    identifier = token.split(",")[0]
+    if identifier not in monitors:
+        monitors[identifier] = []
+    monitors[identifier].append(websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketException:
+        print(f"Subscriber disconnected for token: {identifier}")
+    finally:
+        monitors[identifier].remove(websocket)
+        if not monitors[identifier]:
+            del monitors[identifier]
