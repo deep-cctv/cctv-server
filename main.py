@@ -27,10 +27,13 @@ user_tokens = {
     "lee-donghyun,adsfasdfasdfasdf",
     "kim-jinyoung,adsfasdfasdfasdf",
 }
-
-endpoints = {""}
+webhook_endpoints: dict[str, list[str]] = {}
 
 monitors: dict[str, list[WebSocket]] = {}
+
+
+async def detect_violation(file_name: str):
+    return True
 
 
 class Auth(BaseModel):
@@ -120,3 +123,21 @@ async def monitor(websocket: WebSocket, token: Annotated[str | None, Query()]):
         monitors[identifier].remove(websocket)
         if not monitors[identifier]:
             del monitors[identifier]
+
+
+class Webhook(BaseModel):
+    token: str
+    endpoint: str
+
+
+@app.get("/alert-webhook")
+async def alert_webhook(webhook: Annotated[Webhook, Query()]):
+    if webhook.token not in user_tokens:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰입니다."
+        )
+    identifier = webhook.token.split(",")[0]
+    if identifier not in webhook_endpoints:
+        webhook_endpoints[identifier] = []
+    webhook_endpoints[identifier].append(webhook.endpoint)
+    return "Webhook registered"
