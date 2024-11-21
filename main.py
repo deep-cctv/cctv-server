@@ -1,9 +1,11 @@
+import asyncio
 import base64
 from os import mkdir
 import time
 from typing import Annotated
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketException, status
 from fastapi.staticfiles import StaticFiles
+import httpx
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -33,7 +35,23 @@ monitors: dict[str, list[WebSocket]] = {}
 
 
 async def detect_violation(file_name: str):
+    print(file_name, "is violated")
     return True
+
+
+background_tasks = set()
+
+
+def create_task(coroutine):
+    task = asyncio.create_task(coroutine)
+    background_tasks.add(task)
+    task.add_done_callback(background_tasks.discard)
+
+
+async def send_to_monitor(identifier: str, data: dict):
+    if identifier in monitors:
+        for subscriber in monitors[identifier]:
+            await subscriber.send_json(data)
 
 
 class Auth(BaseModel):
@@ -81,16 +99,33 @@ async def stream(websocket: WebSocket, auth: Annotated[Auth, Query()]):
             with open(file_name, "wb") as f:
                 f.write(video_bytes)
 
-            if identifier in monitors:
-                for subscriber in monitors[identifier]:
-                    await subscriber.send_json(
-                        {
-                            "type": "CLINET_DATA",
-                            "client": {"uri": file_name, "name": auth.client_name},
-                        }
-                    )
+            create_task(
+                send_to_monitor(
+                    identifier,
+                    {
+                        "type": "CLINET_DATA",
+                        "client": {"uri": file_name, "name": auth.client_name},
+                    },
+                )
+            )
 
+            async def detectVideo():
+                violated = await detect_violation(file_name)
+                if violated:
+                    await send_to_monitor(
+                        identifier, {"type": "ALERT", "name": auth.client_name}
+                    )
+                    if identifier in webhook_endpoints:
+                        async with httpx.AsyncClient() as client:
+                            for endpoint in webhook_endpoints[identifier]:
+                                try:
+                                    await client.get(endpoint)
+                                except:
+                                    pass
+
+            create_task(detectVideo())
             print("Received a video chunk", identifier, file_name)
+
     except WebSocketException:
         print(f"Client disconnected for token: {identifier}")
     finally:
