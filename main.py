@@ -19,7 +19,8 @@ app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 
 user_tokens = {
     # "username,16 length random"
-    "lee-donghyun,adsfasdfasdfasdf"
+    "lee-donghyun,adsfasdfasdfasdf",
+    "kim-jinyoung,adsfasdfasdfasdf",
 }
 
 monitors: dict[str, list[WebSocket]] = {}
