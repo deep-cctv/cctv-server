@@ -15,6 +15,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+try:
+    mkdir("storage")
+except:
+    pass
 app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 
 user_tokens = {
@@ -22,6 +27,8 @@ user_tokens = {
     "lee-donghyun,adsfasdfasdfasdf",
     "kim-jinyoung,adsfasdfasdfasdf",
 }
+
+endpoints = {""}
 
 monitors: dict[str, list[WebSocket]] = {}
 
@@ -52,10 +59,7 @@ async def stream(websocket: WebSocket, auth: Annotated[Auth, Query()]):
 
     identifier = auth.token.split(",")[0]
     dir_name = "storage/" + identifier + "/" + auth.client_name
-    try:
-        mkdir("storage")
-    except:
-        pass
+
     try:
         mkdir("storage/" + identifier)
     except:
@@ -65,19 +69,33 @@ async def stream(websocket: WebSocket, auth: Annotated[Auth, Query()]):
     except:
         pass
 
-    while True:
-        data = await websocket.receive_text()
-        video_bytes = base64.b64decode(data)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            video_bytes = base64.b64decode(data)
 
-        file_name = dir_name + "/" + str(time.time()) + ".mp4"
-        with open(file_name, "wb") as f:
-            f.write(video_bytes)
+            file_name = dir_name + "/" + str(time.time()) + ".mp4"
+            with open(file_name, "wb") as f:
+                f.write(video_bytes)
 
+            if identifier in monitors:
+                for subscriber in monitors[identifier]:
+                    await subscriber.send_json(
+                        {
+                            "type": "CLINET_DATA",
+                            "client": {"uri": file_name, "name": auth.client_name},
+                        }
+                    )
+
+            print("Received a video chunk", identifier, file_name)
+    except WebSocketException:
+        print(f"Client disconnected for token: {identifier}")
+    finally:
         if identifier in monitors:
             for subscriber in monitors[identifier]:
-                await subscriber.send_json({"uri": file_name, "name": auth.client_name})
-
-        print("Received a video chunk", identifier, file_name)
+                await subscriber.send_json(
+                    {"type": "CLIENT_EXIT", "name": auth.client_name}
+                )
 
 
 @app.websocket("/monitor")
