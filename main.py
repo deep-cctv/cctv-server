@@ -3,6 +3,7 @@ from os import mkdir
 import time
 from typing import Annotated
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketException, status
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,6 +15,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 
 user_tokens = {
     # "username,16 length random"
@@ -72,7 +74,7 @@ async def stream(websocket: WebSocket, auth: Annotated[Auth, Query()]):
 
         if identifier in monitors:
             for subscriber in monitors[identifier]:
-                await subscriber.send_text(file_name)
+                await subscriber.send_json({"uri": file_name, "name": auth.client_name})
 
         print("Received a video chunk", identifier, file_name)
 
