@@ -1,3 +1,4 @@
+import os
 import asyncio
 import base64
 from os import mkdir
@@ -22,11 +23,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-try:
-    mkdir("storage")
-except:
-    pass
-app.mount("/storage", StaticFiles(directory="storage"), name="storage")
+# Base directory for all relative paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STORAGE_DIR = os.path.join(BASE_DIR, "storage")
+MODEL_DIR = os.path.join(BASE_DIR, "model")
+MODEL_FILE = os.path.join(MODEL_DIR, "model.h5")
+
+# Ensure necessary directories exist
+os.makedirs(STORAGE_DIR, exist_ok=True)
+app.mount("/storage", StaticFiles(directory=STORAGE_DIR), name="storage")
 
 user_tokens = {
     # "username,16 length random"
@@ -39,7 +44,7 @@ monitors: dict[str, list[WebSocket]] = {}
 
 
 async def detect_violation(file_name: str):
-    model = load_model("./model/model.h5")
+    model = load_model(MODEL_FILE)
     Q = deque(maxlen=128)
     vs = cv2.VideoCapture(file_name)
     while True:
@@ -96,23 +101,16 @@ async def stream(websocket: WebSocket, auth: Annotated[Auth, Query()]):
     await websocket.accept()
 
     identifier = auth.token.split(",")[0]
-    dir_name = "storage/" + identifier + "/" + auth.client_name
-
-    try:
-        mkdir("storage/" + identifier)
-    except:
-        pass
-    try:
-        mkdir(dir_name)
-    except:
-        pass
+    client_dir = os.path.join(STORAGE_DIR, identifier, auth.client_name)
+    os.makedirs(client_dir, exist_ok=True)
 
     try:
         while True:
             data = await websocket.receive_text()
             video_bytes = base64.b64decode(data)
 
-            file_name = dir_name + "/" + str(time.time()) + ".mp4"
+            timestamp = time.time()
+            file_name = os.path.join(client_dir, f"{timestamp}.mp4")
             with open(file_name, "wb") as f:
                 f.write(video_bytes)
 
@@ -121,7 +119,10 @@ async def stream(websocket: WebSocket, auth: Annotated[Auth, Query()]):
                     identifier,
                     {
                         "type": "CLINET_DATA",
-                        "client": {"uri": file_name, "name": auth.client_name},
+                        "client": {
+                            "uri": f"storage/{identifier}/{auth.client_name}/{timestamp}.mp4",
+                            "name": auth.client_name,
+                        },
                     },
                 )
             )
