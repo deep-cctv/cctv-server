@@ -8,10 +8,22 @@ cctv client 에서 보낸 영상을 저장한다. ai 모델을 사용해 영상�
 
 ## 실행
 
+### 개발 환경
+
 ```bash
 pip install -r requirements.txt
+```
+
+### 배포 환경
+
+```bash
+docker build . -t cctv-server
+docker run -p 80:80 cctv-server -v /path/to/save:/code/app/storage
 ```
 
 ## 개발
 
 - fastapi
+- tensorflow
+- opencv
+- pydantic
