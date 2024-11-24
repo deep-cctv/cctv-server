@@ -6,8 +6,12 @@ from typing import Annotated
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketException, status
 from fastapi.staticfiles import StaticFiles
 import httpx
+import numpy as np
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from collections import deque
+import cv2
+from tensorflow.keras.models import load_model
 
 app = FastAPI()
 app.add_middleware(
@@ -35,8 +39,21 @@ monitors: dict[str, list[WebSocket]] = {}
 
 
 async def detect_violation(file_name: str):
-    print(file_name, "is violated")
-    return True
+    model = load_model("./model/model.h5")
+    Q = deque(maxlen=128)
+    vs = cv2.VideoCapture(file_name)
+    while True:
+        (grabbed, frame) = vs.read()
+        if not grabbed:
+            break
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = cv2.resize(frame, (128, 128)).astype("float32")
+        frame = frame.reshape(128, 128, 3) / 255
+        preds = model.predict(np.expand_dims(frame, axis=0))[0]
+        Q.append(preds)
+    result = np.array(Q).mean(axis=0)[0]
+    print(file_name, result)
+    return result > 0.5
 
 
 background_tasks = set()
