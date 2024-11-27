@@ -37,6 +37,7 @@ user_tokens = {
     # "username,16 length random"
     "lee-donghyun,adsfasdfasdfasdf",
     "kim-jinyoung,adsfasdfasdfasdf",
+    "sejong,token",
 }
 webhook_endpoints: dict[str, list[str]] = {}
 
