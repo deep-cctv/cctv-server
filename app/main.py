@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import os
 import asyncio
 import base64
@@ -43,23 +44,27 @@ webhook_endpoints: dict[str, list[str]] = {}
 
 monitors: dict[str, list[WebSocket]] = {}
 
+executor = ThreadPoolExecutor()
+model = load_model(MODEL_FILE)
+
 
 async def detect_violation(file_name: str):
-    model = load_model(MODEL_FILE)
-    Q = deque(maxlen=128)
-    vs = cv2.VideoCapture(file_name)
-    while True:
-        (grabbed, frame) = vs.read()
-        if not grabbed:
-            break
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame = cv2.resize(frame, (128, 128)).astype("float32")
-        frame = frame.reshape(128, 128, 3) / 255
-        preds = model.predict(np.expand_dims(frame, axis=0))[0]
-        Q.append(preds)
-    result = np.array(Q).mean(axis=0)[0]
-    print(file_name, result)
-    return result > 0.5
+    def blocking_task():
+        Q = deque(maxlen=128)
+        vs = cv2.VideoCapture(file_name)
+        while True:
+            (grabbed, frame) = vs.read()
+            if not grabbed:
+                break
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = cv2.resize(frame, (128, 128)).astype("float32")
+            frame = frame.reshape(128, 128, 3) / 255
+            preds = model.predict(np.expand_dims(frame, axis=0))[0]
+            Q.append(preds)
+        vs.release()
+        return np.array(Q).mean(axis=0)[0] > 0.5
+
+    return await asyncio.get_running_loop().run_in_executor(executor, blocking_task)
 
 
 background_tasks = set()
